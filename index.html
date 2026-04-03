@@ -18,7 +18,7 @@
   --sh:0 2px 12px rgba(0,85,165,.08);--sh-md:0 4px 24px rgba(0,85,165,.13);
 }
 html,body{height:100%;background:var(--gray-50);font-family:var(--font);color:var(--gray-900);}
-
+ 
 /* ── LOCK ── */
 #lock{position:fixed;inset:0;z-index:999;background:var(--apex-dk);display:flex;flex-direction:column;align-items:center;justify-content:center;}
 .lbg{position:absolute;inset:0;overflow:hidden;pointer-events:none;}
@@ -43,11 +43,11 @@ html,body{height:100%;background:var(--gray-50);font-family:var(--font);color:va
 .l-btn{width:100%;padding:13px;background:white;color:var(--apex);border:none;border-radius:var(--r);font-size:14px;font-weight:700;font-family:var(--font);cursor:pointer;margin-top:4px;transition:all .15s;}
 .l-btn:hover{background:var(--apex-lt);}
 .l-err{font-size:12px;color:#ff8f8f;text-align:center;min-height:18px;margin-top:2px;}
-
+ 
 /* ── APP ── */
 #app{display:none;}
 #app.on{display:block;}
-
+ 
 /* TOPBAR */
 .topbar{background:white;border-bottom:1px solid var(--gray-200);height:52px;padding:0 1rem;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;box-shadow:0 1px 8px rgba(0,85,165,.07);}
 .a-logo{display:flex;align-items:center;gap:8px;text-decoration:none;}
@@ -57,7 +57,7 @@ html,body{height:100%;background:var(--gray-50);font-family:var(--font);color:va
 .tb-div{width:1px;height:20px;background:var(--gray-200);}
 .tb-title{font-size:12px;font-weight:500;color:var(--gray-400);white-space:nowrap;}
 .tb-squad{margin-left:auto;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--apex);background:var(--apex-lt);border:1px solid rgba(0,85,165,.2);padding:3px 10px;border-radius:20px;white-space:nowrap;}
-
+ 
 /* BOTTOM NAV (mobile) */
 .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid var(--gray-200);z-index:100;padding-bottom:env(safe-area-inset-bottom);}
 .bottom-nav .bnav-inner{display:flex;}
@@ -66,7 +66,7 @@ html,body{height:100%;background:var(--gray-50);font-family:var(--font);color:va
 .bnav-btn .bn-label{font-size:10px;font-weight:600;color:var(--gray-400);font-family:var(--font);}
 .bnav-btn.active .bn-label{color:var(--apex);}
 .bnav-btn.active .bn-icon{transform:scale(1.1);}
-
+ 
 /* DESKTOP LAYOUT */
 .layout{display:grid;grid-template-columns:210px 1fr;min-height:calc(100vh - 52px);}
 .sidebar{background:white;border-right:1px solid var(--gray-200);padding:1.25rem 0;display:flex;flex-direction:column;gap:3px;}
@@ -77,18 +77,18 @@ html,body{height:100%;background:var(--gray-50);font-family:var(--font);color:va
 .nav-sec{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--gray-400);padding:.75rem 1.25rem .2rem;}
 .sb-foot{margin-top:auto;padding:.75rem 1.25rem;border-top:1px solid var(--gray-100);}
 .sb-squad{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--apex);opacity:.7;}
-
+ 
 /* MAIN */
 .main{padding:1.25rem;overflow-y:auto;padding-bottom:2rem;}
 .panel{display:none;animation:fadeIn .2s ease;}
 .panel.active{display:block;}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-
+ 
 /* CARD */
 .card{background:white;border:1px solid var(--gray-200);border-radius:var(--r-lg);padding:1.25rem;box-shadow:var(--sh);margin-bottom:1rem;}
 .card-title{font-size:14px;font-weight:600;color:var(--gray-700);margin-bottom:1rem;display:flex;align-items:center;gap:8px;}
 .badge{background:var(--apex);color:white;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;}
-
+ 
 /* INPUT */
 .inp-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--apex);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
 .pulse{width:7px;height:7px;background:var(--apex);border-radius:50%;animation:pulse 2s infinite;flex-shrink:0;}
@@ -110,7 +110,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .ai-st.show{display:block;}
 .ai-st.ok{color:var(--ok);}
 .ai-st.err{color:var(--danger);}
-
+ 
 /* FORM */
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:1.25rem 0 1rem;}
 .fg{display:flex;flex-direction:column;gap:4px;}
@@ -120,7 +120,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .fg input:focus,.fg select:focus{border-color:var(--apex);background:white;}
 .dh{font-size:11px;color:var(--apex);margin-top:3px;min-height:14px;font-weight:500;}
 .dh.err{color:var(--danger);}
-
+ 
 /* STATS */
 .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:1rem;}
 .sc{background:white;border:1px solid var(--gray-200);border-radius:var(--r);padding:.875rem 1rem;box-shadow:var(--sh);}
@@ -129,7 +129,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .sc.acc .sv{color:white;}
 .sl{font-size:11px;color:var(--gray-400);margin-bottom:3px;font-weight:500;}
 .sv{font-size:24px;font-weight:700;color:var(--gray-900);font-family:var(--mono);}
-
+ 
 /* FILTERS */
 .fbar{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
 .chip{font-size:12px;padding:5px 12px;border-radius:20px;border:1px solid var(--gray-200);background:white;color:var(--gray-400);cursor:pointer;font-family:var(--font);font-weight:500;transition:all .15s;-webkit-tap-highlight-color:transparent;}
@@ -137,7 +137,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .lhdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
 .llbl{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.06em;}
 .lcnt{background:var(--apex-lt);color:var(--apex);font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;}
-
+ 
 /* TASKS */
 .tlist{display:flex;flex-direction:column;gap:8px;}
 .tc{background:white;border:1px solid var(--gray-200);border-radius:var(--r);padding:12px 13px;display:flex;align-items:flex-start;gap:10px;box-shadow:var(--sh);transition:border-color .15s;}
@@ -160,7 +160,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .del-btn:active{background:var(--danger-lt);color:var(--danger);}
 .empty{text-align:center;padding:2.5rem 1rem;color:var(--gray-400);font-size:13px;}
 .empty-i{font-size:28px;margin-bottom:8px;}
-
+ 
 /* CALENDAR */
 .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .cal-ml{font-size:15px;font-weight:700;color:var(--gray-900);}
@@ -178,10 +178,10 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .tdot{width:4px;height:4px;border-radius:50%;}
 .cal-dt{margin-top:1rem;}
 .cal-dt h3{font-size:14px;font-weight:700;margin-bottom:10px;color:var(--gray-900);}
-
+ 
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .spin{display:inline-block;animation:spin .7s linear infinite;}
-
+ 
 /* ── RESPONSIVE ── */
 @media(max-width:640px){
   .layout{grid-template-columns:1fr;}
@@ -202,13 +202,13 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 @media(min-width:641px){
   .stats{grid-template-columns:repeat(4,1fr);}
 }
-
+ 
 /* ── MOBILE ── */
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:6px;flex-direction:column;gap:5px;}
 .hamburger span{display:block;width:22px;height:2px;background:var(--apex-blue);border-radius:2px;transition:all 0.3s;}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:49;}
 .sidebar-overlay.show{display:block;}
-
+ 
 @media(max-width:768px){
   .hamburger{display:flex;}
   .topbar{padding:0 1rem;}
@@ -246,7 +246,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
   .cal-grid{gap:2px;}
   .day-num{font-size:11px;}
 }
-
+ 
 @media(max-width:380px){
   .stats-row{grid-template-columns:1fr 1fr;}
   .topbar-squad{display:none;}
@@ -254,7 +254,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 </style>
 </head>
 <body>
-
+ 
 <!-- LOCK -->
 <div id="lock">
   <div class="lbg"><div class="lbg-d"></div><div class="lbg-d2"></div></div>
@@ -274,7 +274,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
     <button class="l-btn" onclick="tryUnlock()">Entrar</button>
   </div>
 </div>
-
+ 
 <!-- APP -->
 <div id="app">
   <div class="topbar">
@@ -286,7 +286,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
     <span class="tb-title">Gestor de Demandas</span>
     <div class="tb-squad">Squad AAA</div>
   </div>
-
+ 
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="layout">
     <nav class="sidebar">
@@ -296,7 +296,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
       <button class="nav-item" onclick="switchTab('calendar')"><span class="nav-icon">📅</span> Agenda</button>
       <div class="sb-foot"><div class="sb-squad">◆ Squad AAA</div></div>
     </nav>
-
+ 
     <main class="main">
       <!-- NOVA DEMANDA -->
       <div class="panel active" id="panel-input">
@@ -331,7 +331,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
           <button class="btn-p" onclick="addTask()" style="width:100%;justify-content:center;padding:12px;">Adicionar à lista</button>
         </div>
       </div>
-
+ 
       <!-- TAREFAS -->
       <div class="panel" id="panel-tasks">
         <div class="stats">
@@ -352,7 +352,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
           <div class="tlist" id="tlist"></div>
         </div>
       </div>
-
+ 
       <!-- AGENDA -->
       <div class="panel" id="panel-calendar">
         <div class="card">
@@ -367,7 +367,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
       </div>
     </main>
   </div>
-
+ 
   <!-- BOTTOM NAV (mobile) -->
   <nav class="bottom-nav">
     <div class="bnav-inner">
@@ -383,16 +383,16 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
     </div>
   </nav>
 </div>
-
+ 
 <script>
 const KEY='apex_squad_aaa_v1';
 let tasks=[],fil='all',calY,calM,selD=null;
-
+ 
 function pad(n){return String(n).padStart(2,'0');}
 function todayS(){const d=new Date();return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;}
 function isOvd(t){return!t.done&&t.date&&t.date<todayS();}
 function isTod(t){return t.date===todayS();}
-
+ 
 // LOCK
 const SENHA='001122';
 function tryUnlock(){
@@ -410,17 +410,17 @@ function tryUnlock(){
 }
 function togglePwd(){const i=document.getElementById('pwd');i.type=i.type==='password'?'text':'password';}
 document.getElementById('pwd').focus();
-
+ 
 // STORAGE
 // ── Shared storage — todos do Squad AAA veem as mesmas tarefas ──
 const SHARED_URL='https://jsonblob.com/api/jsonBlob/019d53b4-74b9-7e6f-bf9f-30db725301f5';
-
+ 
 async function load(){
   try{const r=localStorage.getItem(KEY);if(r)tasks=JSON.parse(r);}catch(e){tasks=[];}
   await syncFromServer();
   setInterval(syncFromServer,15000);
 }
-
+ 
 async function syncFromServer(){
   try{
     const r=await fetch(SHARED_URL,{headers:{'Accept':'application/json'}});
@@ -435,7 +435,7 @@ async function syncFromServer(){
     }
   }catch(e){}
 }
-
+ 
 async function save(){
   try{localStorage.setItem(KEY,JSON.stringify(tasks));}catch(e){}
   try{
@@ -446,7 +446,7 @@ async function save(){
     });
   }catch(e){}
 }
-
+ 
 // IA
 async function corrigir(){
   const raw=document.getElementById('ai-text').value.trim();
@@ -456,15 +456,15 @@ async function corrigir(){
   btn.disabled=true;btn.innerHTML='<span class="spin">⟳</span> Corrigindo...';
   st.textContent='Corrigindo e extraindo...';st.className='ai-st show ok';
   document.getElementById('corr-box').className='corr-box';
-
+ 
   const now=new Date();
   const dias=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
   const prompt=`Você é um assistente de gestão de tarefas bancárias. Analise o texto e retorne APENAS JSON válido, sem texto extra.
-
+ 
 Hoje: ${todayS()} (${dias[now.getDay()]})
-
+ 
 Texto: "${raw}"
-
+ 
 JSON:
 {
   "texto_corrigido": "reescreva completamente correto em português formal. Corrija: ortografia, erros de digitação (qe→que, kconta→conta, excluuir→excluir, odia→o dia), nomes próprios com inicial maiúscula em CADA palavra (wilson calmon→Wilson Calmon, dudu→Dudu), siglas em MAIÚSCULO (stvm→STVM, cpf→CPF), início de frases com maiúscula, pontuação, abreviações (pra→para, ate→até, tbm→também, vc→você)",
@@ -474,7 +474,7 @@ JSON:
   "hora_texto": "expressão de hora: 17h, fim do dia, durante o dia — vazio se não houver",
   "prioridade": "low se baixa/sem pressa, high se urgente/asap, mid padrão"
 }`;
-
+ 
   try{
     const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,messages:[{role:'user',content:prompt}]})});
     if(!res.ok)throw new Error('HTTP '+res.status);
@@ -489,7 +489,7 @@ JSON:
   }
   btn.disabled=false;btn.innerHTML='Corrigir e extrair ↗';
 }
-
+ 
 function preencher(d){
   document.getElementById('corr-text').textContent=d.texto_corrigido||'';
   document.getElementById('corr-box').className='corr-box show';
@@ -501,7 +501,7 @@ function preencher(d){
   document.getElementById('f-date-text').value=dt;document.getElementById('f-time-text').value=hr;
   parseDt(dt);parseTm(hr);
 }
-
+ 
 function corLocal(s){
   let r=s.replace(/[\\\/]+([A-Za-záàãâéêíóõôúçÁÀÃÂÉÊÍÓÕÔÚÇ])/g,'$1');
   r=r.replace(/\b(stvm|cpf|cnpj|rg|cnh|cdb|lci|lca|ted|doc|pix)\b/gi,m=>m.toUpperCase());
@@ -531,7 +531,7 @@ function extrai(text){
   if(titulo)titulo=titulo.charAt(0).toUpperCase()+titulo.slice(1);
   return{titulo,banker,data_texto:dt,hora_texto:hr,prioridade:priority};
 }
-
+ 
 // DATE/TIME
 function interpDt(s){
   if(!s)return null;
@@ -673,7 +673,7 @@ function switchTab(name){
   closeSidebar();
   const bn=document.getElementById('bn-'+name);if(bn)bn.classList.add('active');
 }
-
+ 
 function toggleSidebar(){
   const s=document.querySelector('.sidebar');
   const o=document.getElementById('sidebar-overlay');
