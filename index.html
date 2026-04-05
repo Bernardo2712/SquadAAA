@@ -326,7 +326,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
       <!-- NOVA DEMANDA -->
       <div class="panel active" id="panel-input">
         <div class="card">
-          <div class="card-title">Nova Demanda <span class="badge">IA</span></div>
+          <div class="card-title">Nova Demanda <span class="badge">Auto</span></div>
           <div class="inp-label"><div class="pulse"></div> Cole ou descreva sua demanda</div>
           <textarea class="dem-in" id="ai-text" placeholder="Escreva como quiser — com erros, abreviações, minúsculas...&#10;Ex: dudu pediu pra assim qe sair a stvm do wilson calmon excluuir a kconta vazia. ate terca durante odia prioridade baixa"></textarea>
           <div class="corr-box" id="corr-box"><div class="clabel">Texto corrigido pela IA</div><div class="ctext" id="corr-text"></div></div>
@@ -606,112 +606,28 @@ function clearAudio(){
 }
 
 
-// IA
+// IA — correção local inteligente (sem API externa)
 async function corrigir(){
   const raw=document.getElementById('ai-text').value.trim();
   const imgAtts=attachments.filter(a=>a.type.startsWith('image/'));
-  if(!raw && !imgAtts.length){alert('Cole texto, anexe uma imagem ou grave um audio.');return;}
+  if(!raw && !imgAtts.length){alert('Cole texto, anexe uma imagem ou grave um áudio.');return;}
 
   const btn=document.getElementById('main-btn');
   const st=document.getElementById('ai-st');
   btn.disabled=true;
-  btn.innerHTML='<span class="spin">\u23F3</span> Analisando...';
-  st.textContent='IA analisando...';
+  btn.innerHTML='<span class="spin">\u23F3</span> Processando...';
+  st.textContent='Corrigindo e extraindo informações...';
   st.className='ai-st show ok';
   document.getElementById('corr-box').className='corr-box';
 
-  const now=new Date();
-  const dias=['domingo','segunda-feira','terca-feira','quarta-feira','quinta-feira','sexta-feira','sabado'];
-  const hoje=todayS();
-  const addD=n=>{const d=new Date(now);d.setDate(d.getDate()+n);return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();};
+  // Processa texto
+  const corrigido = corLocal(raw);
+  const campos = extrai(corrigido);
+  campos.texto_corrigido = corrigido;
 
-  // Se tiver imagens, usa visao; senao usa so texto
-  const hasImages=imgAtts.length>0;
-  let result=null;
-
-  if(hasImages){
-    // Chama com visao (imagens + texto opcional)
-    const parts=[];
-    for(const img of imgAtts){
-      const b64=img.dataUrl.split(',')[1];
-      const mt=img.type&&img.type.startsWith('image/')?img.type:'image/png';
-      parts.push({type:'image',source:{type:'base64',media_type:mt,data:b64}});
-    }
-    const textoExtra=raw?'\n\nTexto adicional do usuario: "'+raw+'"':'';
-    parts.push({type:'text',text:
-      'Voce e um assistente de gestao de tarefas bancarias. Leia a imagem com TOTAL atencao.\n\n'+
-      'Hoje: '+hoje+' ('+dias[now.getDay()]+')\n'+
-      'Amanha: '+addD(1)+'\n'+
-      'Depois de amanha: '+addD(2)+'\n'+
-      textoExtra+'\n\n'+
-      'INSTRUCOES:\n'+
-      '1. Leia TODO o conteudo da imagem (pode ser conversa de WhatsApp, Teams, email, documento)\n'+
-      '2. Identifique: quem fez o pedido, o que precisa ser feito, qual o prazo, qual a prioridade\n'+
-      '3. Se for conversa, ignore timestamps e nomes repetidos, extraia apenas a demanda\n'+
-      '4. Corrija nomes proprios (maiuscula em cada palavra), siglas em MAIUSCULO (STVM, BTG, CPF)\n'+
-      '5. Quando houver correcao na fala/texto ("OU MELHOR", "digo", "na verdade"), use SEMPRE a ultima versao\n\n'+
-      'Retorne SOMENTE este JSON (sem markdown, sem texto extra):\n'+
-      '{"texto_corrigido":"resumo limpo de 2-3 frases do que precisa ser feito","titulo":"acao principal em ate 65 chars","banker":"nome de quem pediu com maiusculas em cada palavra, vazio se nao identificado","data_texto":"prazo final: amanha / depois de amanha / terca / dia 15 / 07/04. Vazio se nao houver","hora_texto":"horario: manha / tarde / noite / 17h / fim do dia. Vazio se nao houver","prioridade":"low se baixa/sem pressa, high se urgente/asap, mid nos demais"}'
-    });
-    try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:parts}]})
-      });
-      if(!res.ok){const err=await res.text();throw new Error('HTTP '+res.status+': '+err);}
-      const data=await res.json();
-      const txt=(data.content||[]).map(i=>i.text||'').join('').trim()
-        .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
-      result=JSON.parse(txt);
-    }catch(e){
-      console.error('Imagem erro:',e);
-      st.textContent='Erro ao ler imagem: '+e.message;
-      st.className='ai-st show err';
-      btn.disabled=false;btn.innerHTML='Corrigir e extrair \u2197';
-      return;
-    }
-  } else {
-    // So texto
-    const prompt=
-      'Voce e um assistente de gestao de tarefas bancarias. Analise o texto e retorne APENAS JSON valido, sem markdown.\n\n'+
-      'Hoje: '+hoje+' ('+dias[now.getDay()]+')\n'+
-      'Amanha: '+addD(1)+'\n'+
-      'Depois de amanha: '+addD(2)+'\n\n'+
-      'Texto: "'+raw+'"\n\n'+
-      'REGRAS:\n'+
-      '1. WHATSAPP/TEAMS: Remova "[HH:MM, DD/MM] Nome:" — fique so com o conteudo\n'+
-      '2. CORRECOES DE FALA: "OU MELHOR", "digo", "na verdade" → use SEMPRE a ultima versao mencionada\n'+
-      '3. ORTOGRAFIA: qe→que, kconta→conta, pra→para, vc→voce, tbm→tambem, nao→nao\n'+
-      '4. NOMES: inicial maiuscula em cada palavra. SIGLAS: MAIUSCULO\n'+
-      '5. texto_corrigido: resumo limpo de 2-3 frases, sem timestamps\n\n'+
-      'JSON:\n'+
-      '{"texto_corrigido":"resumo limpo","titulo":"acao principal ate 65 chars","banker":"quem pediu com maiusculas, vazio se nao souber","data_texto":"prazo final: amanha/depois de amanha/terca/dia 15. Vazio se nao houver","hora_texto":"manha/tarde/noite/17h/fim do dia. Vazio se nao houver","prioridade":"low/mid/high"}';
-    try{
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
-      });
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      const data=await res.json();
-      const txt=(data.content||[]).map(i=>i.text||'').join('').trim()
-        .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
-      result=JSON.parse(txt);
-    }catch(e){
-      console.error('API erro:', e);
-      st.textContent='Erro: '+e.message+' — Abra o console (F12) para detalhes.';
-      st.className='ai-st show err';
-      btn.disabled=false;btn.innerHTML='Corrigir e extrair \u2197';
-      return;
-    }
-  }
-
-  if(result){
-    preencher(result);
-    st.textContent='\u2705 Demanda analisada e campos preenchidos!';
-    st.className='ai-st show ok';
-  }
+  preencher(campos);
+  st.textContent='\u2705 Texto corrigido e campos preenchidos!';
+  st.className='ai-st show ok';
   btn.disabled=false;
   btn.innerHTML='Corrigir e extrair \u2197';
 }
@@ -757,30 +673,110 @@ function preencher(d){
 }
 
 function corLocal(s){
-  let r=s.replace(/[\\\/]+([A-Za-záàãâéêíóõôúçÁÀÃÂÉÊÍÓÕÔÚÇ])/g,'$1');
-  r=r.replace(/\b(stvm|cpf|cnpj|rg|cnh|cdb|lci|lca|ted|doc|pix)\b/gi,m=>m.toUpperCase());
-  const t=[[/\bqe\b/gi,'que'],[/\bkconta\b/gi,'conta'],[/\bexcluuir\b/gi,'excluir'],[/\bodia\b/gi,'o dia'],[/\bpra\b/gi,'para'],[/\bate\b/gi,'até'],[/\btbm\b/gi,'também'],[/\bvc\b/gi,'você'],[/\bn\b/gi,'não'],[/\bq\b/gi,'que'],[/\bmt\b/gi,'muito']];
-  for(const[rx,rep]of t)r=r.replace(rx,rep);
-  r=r.replace(/(^|[.!?]\s+)([a-záàãâéêíóõôúç])/gi,(_,p,c)=>p+c.toUpperCase());
-  r=r.charAt(0).toUpperCase()+r.slice(1);
-  if(!/[.!?]$/.test(r.trim()))r=r.trim()+'.';
+  if(!s) return s;
+  let r = s;
+
+  // 1. Remove timestamps de WhatsApp: "[13:34, 02/04/2026] Nome Sobrenome:"
+  r = r.replace(/\[\d{1,2}:\d{2},?\s*\d{1,2}\/\d{1,2}\/\d{2,4}\]\s*[^:]+:\s*/g, ' ');
+  // Remove formato "Nome Sobrenome: " repetido no início de linhas
+  r = r.replace(/^[A-ZÀ-Ú][a-zA-ZÀ-ú\s]{2,30}:\s*/gm, '');
+  // Remove "Encaminhada" e similares
+  r = r.replace(/\b(encaminhada|editada|lida)\b/gi, '');
+  r = r.replace(/\s{2,}/g, ' ').trim();
+
+  // 2. Siglas financeiras/bancárias em MAIÚSCULO
+  r = r.replace(/\b(stvm|suitability|cpf|cnpj|rg|cnh|cdb|lci|lca|lci|ted|doc|pix|btg|xp|itau|bb|cef|hsbc|stf|stj|b3|cetip|selic|cdi|ipca|igpm|inss|fgts|iof|ir|irrf|darf|gps|guia|gare|nfs|nfe|nf)\b/gi, m => m.toUpperCase());
+
+  // 3. Correções de palavras — ordem importa (mais específico primeiro)
+  const correcoes = [
+    // Variações de amanhã
+    [/\baamnha\b/gi,'amanhã'],[/\baamanha\b/gi,'amanhã'],[/\bamanah\b/gi,'amanhã'],
+    [/\bamnhã\b/gi,'amanhã'],[/\bamnha\b/gi,'amanhã'],[/\bamanh[ãa]\b/gi,'amanhã'],
+    [/\bamanha\b/gi,'amanhã'],
+    // Depois de amanhã
+    [/depois\s+de\s+amanha\b/gi,'depois de amanhã'],
+    [/depois\s+d[ae]\s+amamha\b/gi,'depois de amanhã'],
+    // Abreviações de dias
+    [/\bseg[\.-]?feira\b/gi,'segunda-feira'],[/\bter[\.-]?feira\b/gi,'terça-feira'],
+    [/\bqua[\.-]?feira\b/gi,'quarta-feira'],[/\bqui[\.-]?feira\b/gi,'quinta-feira'],
+    [/\bsex[\.-]?feira\b/gi,'sexta-feira'],
+    // Palavras comuns
+    [/\bpra\b/gi,'para'],[/\bpras\b/gi,'para as'],[/\bpros\b/gi,'para os'],[/\bpro\b/gi,'para o'],
+    [/\bvc\b/gi,'você'],[/\bvcs\b/gi,'vocês'],
+    [/\btbm\b/gi,'também'],[/\btb\b/gi,'também'],
+    [/\bnao\b/gi,'não'],[/\bn[aã]o\b/gi,'não'],
+    [/\bpq\b/gi,'porque'],[/\bpqe\b/gi,'porque'],[/\bqe\b/gi,'que'],
+    [/\bmt\b/gi,'muito'],[/\bmto\b/gi,'muito'],
+    [/\bmsm\b/gi,'mesmo'],[/\bmesm[oa]\b/gi,'mesmo'],
+    [/\bmsg\b/gi,'mensagem'],[/\bmsgs\b/gi,'mensagens'],
+    [/\bblz\b/gi,'beleza'],[/\bflw\b/gi,'falou'],[/\bvlw\b/gi,'valeu'],
+    [/\bta\b/gi,'está'],[/\btas\b/gi,'está'],
+    [/\bsoh\b/gi,'só'],[/\bsoo\b/gi,'só'],
+    [/\bodia\b/gi,'o dia'],[/\bqdo\b/gi,'quando'],[/\bqto\b/gi,'quanto'],
+    [/\bnss\b/gi,'nós'],[/\btd\b/gi,'tudo'],[/\btds\b/gi,'todos'],
+    [/\bfaz[re]r\b/gi,'fazer'],[/\bconts\b/gi,'conta'],[/\bkconta\b/gi,'conta'],
+    [/\bexcluuir\b/gi,'excluir'],[/\bexkluir\b/gi,'excluir'],
+    [/\bate\b/gi,'até'],[/\bate\s/gi,'até '],
+    [/\\stvm\b/gi,'STVM'],[/\/stvm\b/gi,'STVM'],
+    [/\\cpf\b/gi,'CPF'],[/\/cpf\b/gi,'CPF'],
+  ];
+  for(const [rx, rep] of correcoes) r = r.replace(rx, rep);
+
+  // 4. Capitaliza nomes próprios: palavra que vem após "do", "da", "de", "pelo", "pela"
+  // quando seguida de maiúscula já não precisa
+  // Capitaliza o início de cada frase
+  r = r.replace(/(^|[.!?\n]\s*)([a-záàãâéêíóõôúç])/g, (_, p, c) => p + c.toUpperCase());
+  // Capitaliza primeira letra geral
+  if(r.length > 0) r = r.charAt(0).toUpperCase() + r.slice(1);
+  // Garante ponto no final
+  r = r.trim();
+  if(r && !/[.!?]$/.test(r)) r += '.';
+
   return r;
 }
 function extrai(text){
   const sl=text.toLowerCase();
   let banker='';
-  const cm=text.match(/^([A-ZÀ-Úa-zà-ú]{2,20})(?:\s*:|(?=\s+pediu|\s+solicitou))/i);
-  if(cm)banker=cm[1].trim().replace(/\b\w/g,c=>c.toUpperCase());
+  // Detecta banker: nome antes de ":" ou antes de "pediu/solicitou/disse/falou/mandou"
+  const cm=text.match(/^([A-ZÀ-Úa-zà-ú][a-zA-ZÀ-ú\s]{1,30})(?:\s*:|(?=\s+pediu|\s+solicitou|\s+disse|\s+falou|\s+mandou|\s+quer|\s+precisa))/i);
+  if(cm) banker=cm[1].trim().replace(/\w/g,c=>c.toUpperCase());
   let priority='mid';
-  if(/prioridade\s+baixa|sem\s+pressa/.test(sl))priority='low';
-  else if(/urgente|urgência|asap|prioridade\s+alta/.test(sl))priority='high';
+  if(/prioridade\s+baixa|sem\s+pressa|sem\s+urgencia|nao\s+urgente|baixa\s+prioridade/.test(sl))priority='low';
+  else if(/urgente|urgencia|urgência|asap|prioridade\s+alta|alta\s+prioridade|para\s+agora|imediato/.test(sl))priority='high';
   let dt='';
-  const dr=[/pra?\s+(amanh[ãa])/i,/até\s+(amanh[ãa])/i,/pra?\s+((?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?)/i,/até\s+((?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?)/i,/para\s+((?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?)/i,/(dia\s+\d{1,2})/i,/(\d{1,2}\/\d{1,2})/];
-  for(const p of dr){const m=text.match(p);if(m){dt=m[1].trim();break;}}
+  const dr=[
+    /depois\s+de\s+amanh[ãa]/i,
+    /pra?\s+(amanh[ãa])/i,/até\s+(amanh[ãa])/i,/para\s+(amanh[ãa])/i,
+    /\bamanh[ãa]\b/i,
+    /pra?\s+((?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?)/i,
+    /até\s+((?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?)/i,
+    /para\s+((?:segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?)/i,
+    /(dia\s+\d{1,2})/i,/(\d{1,2}\/\d{1,2})/
+  ];
+  for(const p of dr){
+    const m=text.match(p);
+    if(m){
+      // Para padrões sem grupo de captura, usa o match inteiro
+      dt=(m[1]||m[0]).trim();
+      break;
+    }
+  }
   if(!dt){const dm=sl.match(/\b(segunda|terça|quarta|quinta|sexta|sábado|domingo)(?:[\s-]?feira)?\b/);if(dm)dt=dm[0];}
   let hr='';
-  const tr=[/(\d{1,2}h\d{0,2})/i,/(\d{1,2}:\d{2})/,/(fim do dia)/i,/(durante o dia)/i];
-  for(const p of tr){const m=text.match(p);if(m){hr=m[1].trim();break;}}
+  const trMap=[
+    [/\b(\d{1,2}h\d{0,2})\b/i, null],
+    [/(\d{1,2}:\d{2})/, null],
+    [/pela\s+manh[ãa]|de\s+manh[ãa]|\bmanh[ãa]\b/i, 'De manhã'],
+    [/pela\s+tarde|de\s+tarde|\btarde\b/i, 'De tarde'],
+    [/pela\s+noite|de\s+noite|\bnoite\b/i, 'De noite'],
+    [/fim\s+do\s+dia|final\s+do\s+dia/i, 'Fim do dia'],
+    [/durante\s+o\s+dia|ao\s+longo/i, 'Durante o dia'],
+    [/meio\s+dia/i, 'Ao meio-dia'],
+  ];
+  for(const[rx,label]of trMap){
+    const m=text.match(rx);
+    if(m){ hr=label||m[1]||m[0]; break; }
+  }
   let titulo=text.replace(/^[A-ZÀ-Úa-zà-ú\s]{2,20}(?:\s*:|(?=\s+pediu|\s+solicitou))\s*/i,'').replace(/pediu\s+(?:para|pra)\s*/i,'').replace(/para\s+(?:terça|segunda|quarta|quinta|sexta|sábado|domingo)[\s\S]*/i,'').replace(/até\s+(?:terça|segunda|quarta|quinta|sexta|sábado|domingo)[\s\S]*/i,'').replace(/prioridade\s+\w+/gi,'').replace(/urgente|asap/gi,'').replace(/durante o dia/gi,'').replace(/\s{2,}/g,' ').replace(/[,.\s]+$/,'').trim();
   if(titulo)titulo=titulo.charAt(0).toUpperCase()+titulo.slice(1);
   return{titulo,banker,data_texto:dt,hora_texto:hr,prioridade:priority};
