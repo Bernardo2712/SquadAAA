@@ -699,14 +699,9 @@ async function corrigir(){
         .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
       result=JSON.parse(txt);
     }catch(e){
-      // fallback local
-      const c=corLocal(raw);
-      const f=extrai(c);
-      f.texto_corrigido=c;
-      result=f;
-      st.textContent='\u26a0\ufe0f Sem conexao — correcao local aplicada.';
-      st.className='ai-st show ok';
-      preencher(result);
+      console.error('API erro:', e);
+      st.textContent='Erro: '+e.message+' — Abra o console (F12) para detalhes.';
+      st.className='ai-st show err';
       btn.disabled=false;btn.innerHTML='Corrigir e extrair \u2197';
       return;
     }
