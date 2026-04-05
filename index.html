@@ -294,7 +294,7 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
       <button class="nav-item active" onclick="switchTab('input')"><span class="nav-icon">＋</span> Nova Demanda</button>
       <button class="nav-item" onclick="switchTab('tasks')"><span class="nav-icon">☑</span> Minhas Tarefas</button>
       <button class="nav-item" onclick="switchTab('calendar')"><span class="nav-icon">📅</span> Agenda</button>
-      <div class="sb-foot"><div class="sb-squad">◆ Squad AAA</div></div>
+      <div class="sb-foot"><div class="sb-squad">◆ Squad AAA</div><button onclick="configurarFirebase()" style="margin-top:8px;font-size:10px;color:var(--apex);background:var(--apex-lt);border:1px solid rgba(0,85,165,.2);border-radius:6px;padding:4px 8px;cursor:pointer;width:100%;font-family:var(--font);">⚙ Configurar sync</button></div>
     </nav>
  
     <main class="main">
@@ -411,24 +411,24 @@ function tryUnlock(){
 function togglePwd(){const i=document.getElementById('pwd');i.type=i.type==='password'?'text':'password';}
 document.getElementById('pwd').focus();
  
-// STORAGE
-// ── Shared storage — todos do Squad AAA veem as mesmas tarefas ──
-const SHARED_URL='https://jsonblob.com/api/jsonBlob/019d53b4-74b9-7e6f-bf9f-30db725301f5';
+// STORAGE — Firebase Realtime Database (compartilhado entre todos do Squad AAA)
+const FB='https://squadaaa-5926a-default-rtdb.firebaseio.com';
  
 async function load(){
   try{const r=localStorage.getItem(KEY);if(r)tasks=JSON.parse(r);}catch(e){tasks=[];}
+  renderAll();
   await syncFromServer();
-  setInterval(syncFromServer,15000);
+  setInterval(syncFromServer,10000);
 }
  
 async function syncFromServer(){
   try{
-    const r=await fetch(SHARED_URL,{headers:{'Accept':'application/json'}});
+    const r=await fetch(FB+'/tasks.json');
     if(r.ok){
       const d=await r.json();
-      const serverTasks=Array.isArray(d)?d:[];
-      if(JSON.stringify(serverTasks)!==JSON.stringify(tasks)){
-        tasks=serverTasks;
+      const s=Array.isArray(d)?d:[];
+      if(JSON.stringify(s)!==JSON.stringify(tasks)){
+        tasks=s;
         try{localStorage.setItem(KEY,JSON.stringify(tasks));}catch(e){}
         renderAll();
       }
@@ -439,7 +439,7 @@ async function syncFromServer(){
 async function save(){
   try{localStorage.setItem(KEY,JSON.stringify(tasks));}catch(e){}
   try{
-    await fetch(SHARED_URL,{
+    await fetch(FB+'/tasks.json',{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(tasks)
