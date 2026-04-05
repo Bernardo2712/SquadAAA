@@ -624,77 +624,101 @@ async function corrigir(){
   const dias=['domingo','segunda-feira','terca-feira','quarta-feira','quinta-feira','sexta-feira','sabado'];
   const hoje=todayS();
   const addD=n=>{const d=new Date(now);d.setDate(d.getDate()+n);return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();};
-  const amanha=addD(1);
-  const depoisAmanha=addD(2);
 
-  const msgContent=[];
-  for(const img of imgAtts){
-    const b64=img.dataUrl.split(',')[1];
-    msgContent.push({type:'image',source:{type:'base64',media_type:img.type||'image/jpeg',data:b64}});
-  }
+  // Se tiver imagens, usa visao; senao usa so texto
+  const hasImages=imgAtts.length>0;
+  let result=null;
 
-  const textoSecao=raw ? `TEXTO/AUDIO RECEBIDO:\n"${raw}"` : '(sem texto — use apenas as imagens)';
-  const imgSecao=imgAtts.length>0 ? 'IMAGENS ANEXADAS: Leia TODAS as imagens. Extraia nomes, tarefas, prazos e qualquer informacao relevante. Se for conversa (WhatsApp/Teams), identifique quem pediu o que e para quando.' : '';
-
-  const instrucoes=`Voce eh um assistente de gestao de tarefas bancarias. Analise o conteudo abaixo e retorne APENAS JSON valido, sem markdown, sem texto extra.
-
-Hoje: ${hoje} (${dias[now.getDay()]})
-Amanha: ${amanha}
-Depois de amanha: ${depoisAmanha}
-
-${imgSecao}
-
-${textoSecao}
-
-REGRAS OBRIGATORIAS:
-1. LIMPEZA DE WHATSAPP: Remova padroes "[HH:MM, DD/MM] Nome:" — fique so com o conteudo
-2. CORRECOES DE FALA: Quando houver "OU MELHOR", "digo", "na verdade", "corrigindo" — use SEMPRE a ultima versao. Ex: "amanha, OU MELHOR, depois de amanha" → prazo = depois de amanha
-3. ORTOGRAFIA: qe→que, kconta→conta, pra→para, vc→voce, tbm→tambem, nao→nao, mt→muito
-4. NOMES PROPRIOS: inicial maiuscula em cada palavra
-5. SIGLAS: MAIUSCULO (stvm→STVM, btg→BTG, cpf→CPF)
-6. texto_corrigido: resumo limpo de 2-3 frases do que precisa ser feito, SEM timestamps, SEM repeticoes
-
-Retorne EXATAMENTE:
-{
-  "texto_corrigido": "resumo limpo e objetivo",
-  "titulo": "acao principal em ate 65 chars",
-  "banker": "nome de quem pediu com maiusculas, vazio se nao identificado",
-  "data_texto": "prazo FINAL apos correcoes. Use: amanha / depois de amanha / terca / dia 15 / 07/04. Vazio se nao houver.",
-  "hora_texto": "horario: manha / tarde / noite / 17h / fim do dia. Vazio se nao houver.",
-  "prioridade": "low se baixa/sem pressa, high se urgente/asap/hoje, mid nos demais"
-}`;
-
-  msgContent.push({type:'text',text:instrucoes});
-
-  try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:msgContent}]})
+  if(hasImages){
+    // Chama com visao (imagens + texto opcional)
+    const parts=[];
+    for(const img of imgAtts){
+      const b64=img.dataUrl.split(',')[1];
+      const mt=img.type&&img.type.startsWith('image/')?img.type:'image/png';
+      parts.push({type:'image',source:{type:'base64',media_type:mt,data:b64}});
+    }
+    const textoExtra=raw?'\n\nTexto adicional do usuario: "'+raw+'"':'';
+    parts.push({type:'text',text:
+      'Voce e um assistente de gestao de tarefas bancarias. Leia a imagem com TOTAL atencao.\n\n'+
+      'Hoje: '+hoje+' ('+dias[now.getDay()]+')\n'+
+      'Amanha: '+addD(1)+'\n'+
+      'Depois de amanha: '+addD(2)+'\n'+
+      textoExtra+'\n\n'+
+      'INSTRUCOES:\n'+
+      '1. Leia TODO o conteudo da imagem (pode ser conversa de WhatsApp, Teams, email, documento)\n'+
+      '2. Identifique: quem fez o pedido, o que precisa ser feito, qual o prazo, qual a prioridade\n'+
+      '3. Se for conversa, ignore timestamps e nomes repetidos, extraia apenas a demanda\n'+
+      '4. Corrija nomes proprios (maiuscula em cada palavra), siglas em MAIUSCULO (STVM, BTG, CPF)\n'+
+      '5. Quando houver correcao na fala/texto ("OU MELHOR", "digo", "na verdade"), use SEMPRE a ultima versao\n\n'+
+      'Retorne SOMENTE este JSON (sem markdown, sem texto extra):\n'+
+      '{"texto_corrigido":"resumo limpo de 2-3 frases do que precisa ser feito","titulo":"acao principal em ate 65 chars","banker":"nome de quem pediu com maiusculas em cada palavra, vazio se nao identificado","data_texto":"prazo final: amanha / depois de amanha / terca / dia 15 / 07/04. Vazio se nao houver","hora_texto":"horario: manha / tarde / noite / 17h / fim do dia. Vazio se nao houver","prioridade":"low se baixa/sem pressa, high se urgente/asap, mid nos demais"}'
     });
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const data=await res.json();
-    const txt=(data.content||[]).map(i=>i.text||'').join('').trim()
-      .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
-    const parsed=JSON.parse(txt);
-    preencher(parsed);
-    st.textContent='✅ Demanda analisada e campos preenchidos!';
-    st.className='ai-st show ok';
-  }catch(e){
-    if(raw){
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:parts}]})
+      });
+      if(!res.ok){const err=await res.text();throw new Error('HTTP '+res.status+': '+err);}
+      const data=await res.json();
+      const txt=(data.content||[]).map(i=>i.text||'').join('').trim()
+        .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
+      result=JSON.parse(txt);
+    }catch(e){
+      console.error('Imagem erro:',e);
+      st.textContent='Erro ao ler imagem: '+e.message;
+      st.className='ai-st show err';
+      btn.disabled=false;btn.innerHTML='Corrigir e extrair \u2197';
+      return;
+    }
+  } else {
+    // So texto
+    const prompt=
+      'Voce e um assistente de gestao de tarefas bancarias. Analise o texto e retorne APENAS JSON valido, sem markdown.\n\n'+
+      'Hoje: '+hoje+' ('+dias[now.getDay()]+')\n'+
+      'Amanha: '+addD(1)+'\n'+
+      'Depois de amanha: '+addD(2)+'\n\n'+
+      'Texto: "'+raw+'"\n\n'+
+      'REGRAS:\n'+
+      '1. WHATSAPP/TEAMS: Remova "[HH:MM, DD/MM] Nome:" — fique so com o conteudo\n'+
+      '2. CORRECOES DE FALA: "OU MELHOR", "digo", "na verdade" → use SEMPRE a ultima versao mencionada\n'+
+      '3. ORTOGRAFIA: qe→que, kconta→conta, pra→para, vc→voce, tbm→tambem, nao→nao\n'+
+      '4. NOMES: inicial maiuscula em cada palavra. SIGLAS: MAIUSCULO\n'+
+      '5. texto_corrigido: resumo limpo de 2-3 frases, sem timestamps\n\n'+
+      'JSON:\n'+
+      '{"texto_corrigido":"resumo limpo","titulo":"acao principal ate 65 chars","banker":"quem pediu com maiusculas, vazio se nao souber","data_texto":"prazo final: amanha/depois de amanha/terca/dia 15. Vazio se nao houver","hora_texto":"manha/tarde/noite/17h/fim do dia. Vazio se nao houver","prioridade":"low/mid/high"}';
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+      });
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const data=await res.json();
+      const txt=(data.content||[]).map(i=>i.text||'').join('').trim()
+        .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
+      result=JSON.parse(txt);
+    }catch(e){
+      // fallback local
       const c=corLocal(raw);
       const f=extrai(c);
       f.texto_corrigido=c;
-      preencher(f);
-      st.textContent='⚠️ Sem conexao — correcao local aplicada.';
+      result=f;
+      st.textContent='\u26a0\ufe0f Sem conexao — correcao local aplicada.';
       st.className='ai-st show ok';
-    } else {
-      st.textContent='Erro ao processar. Verifique sua conexao.';
-      st.className='ai-st show err';
+      preencher(result);
+      btn.disabled=false;btn.innerHTML='Corrigir e extrair \u2197';
+      return;
     }
   }
+
+  if(result){
+    preencher(result);
+    st.textContent='\u2705 Demanda analisada e campos preenchidos!';
+    st.className='ai-st show ok';
+  }
   btn.disabled=false;
-  btn.innerHTML='Corrigir e extrair ↗';
+  btn.innerHTML='Corrigir e extrair \u2197';
 }
 
 function preencher(d){
@@ -704,9 +728,37 @@ function preencher(d){
   document.getElementById('f-banker').value=d.banker||'';
   document.getElementById('f-priority').value=d.prioridade||'mid';
   document.getElementById('f-desc').value=d.texto_corrigido||'';
-  const dt=d.data_texto||'',hr=d.hora_texto||'';
-  document.getElementById('f-date-text').value=dt;document.getElementById('f-time-text').value=hr;
-  parseDt(dt);parseTm(hr);
+
+  // Se IA não retornou data_texto, tenta extrair do texto
+  let dt=d.data_texto||'';
+  let hr=d.hora_texto||'';
+  if(!dt){
+    const src=(d.texto_corrigido||'').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g,'');
+    if(/depois\s+de\s+amanha/.test(src)) dt='depois de amanha';
+    else if(/amanha/.test(src)) dt='amanha';
+    else if(/hoje/.test(src)) dt='hoje';
+    else {
+      const dias={segunda:1,terca:2,quarta:3,quinta:4,sexta:5,sabado:6,domingo:0};
+      for(const[k]of Object.entries(dias)){
+        if(new RegExp('\b'+k+'\b').test(src)){dt=k;break;}
+      }
+    }
+  }
+  if(!hr){
+    const src=(d.texto_corrigido||'').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    if(/manha|de manha|pela manha|cedo/.test(src)) hr='De manhã';
+    else if(/tarde|a tarde|pela tarde|de tarde/.test(src)) hr='De tarde';
+    else if(/noite|a noite|pela noite|de noite/.test(src)) hr='De noite';
+    else if(/fim do dia|final do dia/.test(src)) hr='Fim do dia';
+    else if(/meio dia/.test(src)) hr='Ao meio-dia';
+    else { const hm=src.match(/(\d{1,2})h(\d{2})?/); if(hm) hr=hm[0]; }
+  }
+  document.getElementById('f-date-text').value=dt;
+  document.getElementById('f-time-text').value=hr;
+  parseDt(dt);
+  parseTm(hr);
 }
 
 function corLocal(s){
@@ -789,12 +841,19 @@ function interpDt(s){
 function interpTm(s){
   if(!s)return null;
   const n=s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  if(/meio[\s-]?dia/.test(n))return'12:00';
-  if(/fim do dia|eod|final do dia/.test(n))return'18:00';
-  if(/durante o dia|ao longo|qualquer hora|ao longo do dia/.test(n))return'17:00';
-  if(/\bmanha\b|de manha|pela manha|inicio do dia/.test(n))return'09:00';
-  if(/\btarde\b|a tarde|pela tarde|de tarde/.test(n))return'14:00';
-  if(/\bnoite\b|a noite|pela noite/.test(n))return'19:00';
+  // Manhã — retorna texto amigável
+  if(/manha|de manha|pela manha|pela parte da manha|na parte da manha|cedo|de manha cedo|bem cedo|inicio do dia/.test(n)) return'De manhã';
+  // Tarde
+  if(/tarde|a tarde|pela tarde|de tarde|pela parte da tarde|na parte da tarde/.test(n)) return'De tarde';
+  // Noite
+  if(/noite|a noite|pela noite|de noite|pela parte da noite|na parte da noite/.test(n)) return'De noite';
+  // Meio dia
+  if(/meio dia/.test(n)) return'Ao meio-dia';
+  // Fim do dia
+  if(/fim do dia|final do dia|eod|encerrament|no final do dia/.test(n)) return'Fim do dia';
+  // Durante o dia
+  if(/durante o dia|ao longo do dia|qualquer hora|no decorrer/.test(n)) return'Durante o dia';
+  // Hora específica
   const hm=n.match(/(\d{1,2})h(\d{2})?/);if(hm)return`${pad(parseInt(hm[1]))}:${hm[2]||'00'}`;
   const col=n.match(/(\d{1,2}):(\d{2})/);if(col)return`${pad(parseInt(col[1]))}:${col[2]}`;
   return null;
@@ -802,17 +861,31 @@ function interpTm(s){
 const DOWS=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
 function parseDt(v){
   const p=document.getElementById('dh'),h=document.getElementById('f-date');
-  if(!v.trim()){p.textContent='';h.value='';return;}
+  if(!v||!v.trim()){p.textContent='';h.value='';return;}
   const r=interpDt(v);
-  if(r){h.value=r;const[y,m,d]=r.split('-');const dow=new Date(`${r}T12:00:00`).getDay();p.textContent=`📅 ${d}/${m}/${y} (${DOWS[dow]})`;p.className='dh';}
-  else{h.value='';p.textContent='Não entendi — tente: terça, 15/04, amanhã...';p.className='dh err';}
+  if(r){
+    h.value=r;
+    const[y,m,d]=r.split('-');
+    const dow=new Date(`${r}T12:00:00`).getDay();
+    const n=v.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    let label=`${d}/${m}/${y}`;
+    if(/depois\s*de\s*amanha/.test(n)) label='Depois de amanhã — '+label;
+    else if(/\bamanha\b/.test(n)) label='Amanhã — '+label;
+    else if(/\bhoje\b/.test(n)) label='Hoje — '+label;
+    p.textContent='📅 '+label+' ('+DOWS[dow]+')';
+    p.className='dh';
+  } else {
+    h.value='';
+    p.textContent='Não entendi — tente: amanhã, depois de amanhã, terça, 15/04...';
+    p.className='dh err';
+  }
 }
 function parseTm(v){
   const p=document.getElementById('th'),h=document.getElementById('f-time');
-  if(!v.trim()){p.textContent='';h.value='';return;}
+  if(!v||!v.trim()){p.textContent='';h.value='';return;}
   const r=interpTm(v);
-  if(r){h.value=r;p.textContent=`🕐 ${r}`;p.className='dh';}
-  else{h.value='';p.textContent='Tente: 17h, 17:30, fim do dia...';p.className='dh err';}
+  if(r){h.value=r;p.textContent='🕐 '+r;p.className='dh';}
+  else{h.value='';p.textContent='Tente: manhã, tarde, noite, 17h, fim do dia...';p.className='dh err';}
 }
 function clearIn(){
   document.getElementById('ai-text').value='';
