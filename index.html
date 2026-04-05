@@ -541,117 +541,127 @@ async function save(){
   }catch(e){}
 }
 
-// ── AUDIO RECORDING (Web Speech API) ────────────────────
-let _sr=null, _recTimer=null, _recSecs=0, _isRecording=false;
+// ── AUDIO RECORDING ─────────────────────────────────────
+let _sr=null, _isRec=false, _timerStart=null, _timerInterval=null;
 
 function toggleRecording(){
-  if(_isRecording){ stopRecording(); return; }
-  startRecording();
-}
-
-function startRecording(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  if(!SR){ alert('Seu navegador não suporta gravação de voz. Use Chrome ou Edge.'); return; }
-  _sr=new SR();
-  _sr.lang='pt-BR';
-  _sr.continuous=true;
-  _sr.interimResults=true;
-  let final='';
-  _sr.onresult=e=>{
-    let interim='';
-    for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal) final+=e.results[i][0].transcript+' ';
-      else interim+=e.results[i][0].transcript;
-    }
-    document.getElementById('ai-text').value=final+interim;
-  };
-  _sr.onerror=err=>{ if(err.error!=='no-speech') stopRecording(); };
-  _sr.onend=()=>{ if(_isRecording) stopRecording(true); };
-  _sr.start();
-  _isRecording=true;
-  _recSecs=0;
-  // Timer — usa Date para evitar drift
-  const startTime=Date.now();
-  clearInterval(_recTimer);
-  _recTimer=setInterval(()=>{
-    _recSecs=Math.floor((Date.now()-startTime)/1000);
-    const m=String(Math.floor(_recSecs/60)).padStart(2,'0');
-    const s=String(_recSecs%60).padStart(2,'0');
-    const el=document.getElementById('audio-timer');
-    if(el){ el.textContent=m+':'+s; el.style.display='inline'; }
-  },500);
   const btn=document.getElementById('audio-btn');
-  btn.classList.add('recording');
-  btn.innerHTML='<div class="rec-dot"></div> Parar e transcrever';
-}
-
-function stopRecording(autoProcess=false){
-  _isRecording=false;
-  clearInterval(_recTimer);
-  _recTimer=null;
-  if(_sr){ try{ _sr.stop(); }catch(e){} _sr=null; }
-  const btn=document.getElementById('audio-btn');
-  btn.classList.remove('recording');
-  btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
   const timer=document.getElementById('audio-timer');
-  if(timer) timer.style.display='none';
-  const txt=document.getElementById('ai-text').value.trim();
-  if(txt) corrigir();
+  if(!_isRec){
+    // START
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){alert('Use Chrome ou Edge para gravar voz.');return;}
+    _sr=new SR();
+    _sr.lang='pt-BR';
+    _sr.continuous=true;
+    _sr.interimResults=true;
+    let finalTxt='';
+    _sr.onresult=e=>{
+      let interim='';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal) finalTxt+=e.results[i][0].transcript+' ';
+        else interim+=e.results[i][0].transcript;
+      }
+      document.getElementById('ai-text').value=finalTxt+interim;
+    };
+    _sr.onerror=()=>{};
+    _sr.onend=()=>{
+      // only process if we triggered stop (not auto-restart)
+      if(!_isRec){
+        const txt=document.getElementById('ai-text').value.trim();
+        if(txt) corrigir();
+      }
+    };
+    try{ _sr.start(); } catch(e){ alert('Erro ao iniciar microfone.'); return; }
+    _isRec=true;
+    _timerStart=Date.now();
+    clearInterval(_timerInterval);
+    _timerInterval=setInterval(()=>{
+      const elapsed=Math.floor((Date.now()-_timerStart)/1000);
+      const m=String(Math.floor(elapsed/60)).padStart(2,'0');
+      const s=String(elapsed%60).padStart(2,'0');
+      if(timer) timer.textContent=m+':'+s;
+    },1000);
+    timer.textContent='00:00';
+    timer.style.display='inline';
+    btn.classList.add('recording');
+    btn.innerHTML='<div class="rec-dot"></div> Parar e transcrever';
+  } else {
+    // STOP
+    _isRec=false;
+    clearInterval(_timerInterval);
+    timer.style.display='none';
+    btn.classList.remove('recording');
+    btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
+    if(_sr){ try{ _sr.stop(); }catch(e){} _sr=null; }
+    setTimeout(()=>{
+      const txt=document.getElementById('ai-text').value.trim();
+      if(txt) corrigir();
+    },400);
+  }
 }
 
 function clearAudio(){
   document.getElementById('audio-preview').style.display='none';
 }
 
+
 // IA
 async function corrigir(){
   const raw=document.getElementById('ai-text').value.trim();
-  if(!raw && !attachments.length){alert('Cole uma demanda, anexe um arquivo ou grave um áudio.');return;}
+  const imgAtts=attachments.filter(a=>a.type.startsWith('image/'));
+  if(!raw && !imgAtts.length){alert('Cole texto, anexe uma imagem ou grave um audio.');return;}
+
   const btn=document.getElementById('main-btn');
   const st=document.getElementById('ai-st');
-  btn.disabled=true;btn.innerHTML='<span class="spin">⟳</span> Analisando...';
-  st.textContent='IA analisando...';st.className='ai-st show ok';
+  btn.disabled=true;
+  btn.innerHTML='<span class="spin">\u23F3</span> Analisando...';
+  st.textContent='IA analisando...';
+  st.className='ai-st show ok';
   document.getElementById('corr-box').className='corr-box';
 
   const now=new Date();
-  const dias=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
-  const imgAtts=attachments.filter(a=>a.type.startsWith('image/'));
-  const hasImages=imgAtts.length>0;
+  const dias=['domingo','segunda-feira','terca-feira','quarta-feira','quinta-feira','sexta-feira','sabado'];
+  const hoje=todayS();
+  const addD=n=>{const d=new Date(now);d.setDate(d.getDate()+n);return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();};
+  const amanha=addD(1);
+  const depoisAmanha=addD(2);
 
-  // Build message
   const msgContent=[];
-
-  // Add images
   for(const img of imgAtts){
     const b64=img.dataUrl.split(',')[1];
     msgContent.push({type:'image',source:{type:'base64',media_type:img.type||'image/jpeg',data:b64}});
   }
 
-  const instrucoes=`Você é um assistente de gestão de tarefas bancárias. Analise o conteúdo abaixo e retorne APENAS JSON válido, sem texto extra, sem markdown.
+  const textoSecao=raw ? `TEXTO/AUDIO RECEBIDO:\n"${raw}"` : '(sem texto — use apenas as imagens)';
+  const imgSecao=imgAtts.length>0 ? 'IMAGENS ANEXADAS: Leia TODAS as imagens. Extraia nomes, tarefas, prazos e qualquer informacao relevante. Se for conversa (WhatsApp/Teams), identifique quem pediu o que e para quando.' : '';
 
-Hoje: ${todayS()} (${dias[now.getDay()]})
+  const instrucoes=`Voce eh um assistente de gestao de tarefas bancarias. Analise o conteudo abaixo e retorne APENAS JSON valido, sem markdown, sem texto extra.
 
-${hasImages?`IMAGENS ANEXADAS: Leia TODAS as imagens com atenção. Extraia nomes de pessoas, tarefas, prazos, valores, qualquer informação relevante para a demanda. Mesmo que seja uma conversa de WhatsApp, extraia o contexto completo.`:''}
+Hoje: ${hoje} (${dias[now.getDay()]})
+Amanha: ${amanha}
+Depois de amanha: ${depoisAmanha}
 
-${raw?`TEXTO RECEBIDO:
-"${raw}"
+${imgSecao}
 
-REGRAS DE LIMPEZA DO TEXTO:
-- Se o texto vier no formato de WhatsApp/Teams como "[HH:MM, DD/MM/YYYY] Nome: mensagem", remova TODOS os timestamps e nomes repetidos, mantendo APENAS o conteúdo das mensagens
-- Junte as mensagens em um texto coerente e limpo
-- Corrija ortografia (qe→que, kconta→conta, odia→o dia, pra→para, ate→até, vc→você, tbm→também, n→não, mt→muito)
-- Nomes próprios com inicial maiúscula em cada palavra
-- Siglas em MAIÚSCULO (stvm→STVM, cpf→CPF, btg→BTG)
-- Início de frases com maiúscula, pontuação adequada`:'Extraia as informações das imagens anexadas.'}
+${textoSecao}
 
-Retorne este JSON:
+REGRAS OBRIGATORIAS:
+1. LIMPEZA DE WHATSAPP: Remova padroes "[HH:MM, DD/MM] Nome:" — fique so com o conteudo
+2. CORRECOES DE FALA: Quando houver "OU MELHOR", "digo", "na verdade", "corrigindo" — use SEMPRE a ultima versao. Ex: "amanha, OU MELHOR, depois de amanha" → prazo = depois de amanha
+3. ORTOGRAFIA: qe→que, kconta→conta, pra→para, vc→voce, tbm→tambem, nao→nao, mt→muito
+4. NOMES PROPRIOS: inicial maiuscula em cada palavra
+5. SIGLAS: MAIUSCULO (stvm→STVM, btg→BTG, cpf→CPF)
+6. texto_corrigido: resumo limpo de 2-3 frases do que precisa ser feito, SEM timestamps, SEM repeticoes
+
+Retorne EXATAMENTE:
 {
-  "texto_corrigido": "resumo limpo da demanda em 2-4 frases, sem timestamps, sem nomes repetidos, sem formatação de WhatsApp. Apenas o que precisa ser feito.",
-  "titulo": "ação principal objetiva em até 70 chars",
-  "banker": "nome da pessoa que pediu a demanda, com maiúsculas em cada palavra. Vazio se não identificado.",
-  "data_texto": "expressão de data encontrada: segunda, terça, dia 15, 10/04, amanhã — vazio se não houver",
-  "hora_texto": "expressão de hora: 17h, fim do dia, durante o dia — vazio se não houver",
-  "prioridade": "low se baixa/sem pressa, high se urgente/asap, mid padrão"
+  "texto_corrigido": "resumo limpo e objetivo",
+  "titulo": "acao principal em ate 65 chars",
+  "banker": "nome de quem pediu com maiusculas, vazio se nao identificado",
+  "data_texto": "prazo FINAL apos correcoes. Use: amanha / depois de amanha / terca / dia 15 / 07/04. Vazio se nao houver.",
+  "hora_texto": "horario: manha / tarde / noite / 17h / fim do dia. Vazio se nao houver.",
+  "prioridade": "low se baixa/sem pressa, high se urgente/asap/hoje, mid nos demais"
 }`;
 
   msgContent.push({type:'text',text:instrucoes});
@@ -664,21 +674,29 @@ Retorne este JSON:
     });
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
-    const txt=(data.content||[]).map(i=>i.text||'').join('').trim().replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
-    preencher(JSON.parse(txt));
-    st.textContent='✅ Demanda extraída e campos preenchidos!';st.className='ai-st show ok';
+    const txt=(data.content||[]).map(i=>i.text||'').join('').trim()
+      .replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
+    const parsed=JSON.parse(txt);
+    preencher(parsed);
+    st.textContent='✅ Demanda analisada e campos preenchidos!';
+    st.className='ai-st show ok';
   }catch(e){
-    // fallback local apenas para texto
     if(raw){
-      const c=corLocal(raw);const f=extrai(c);f.texto_corrigido=c;
+      const c=corLocal(raw);
+      const f=extrai(c);
+      f.texto_corrigido=c;
       preencher(f);
-      st.textContent='✅ Correção local aplicada.';st.className='ai-st show ok';
+      st.textContent='⚠️ Sem conexao — correcao local aplicada.';
+      st.className='ai-st show ok';
     } else {
-      st.textContent='Erro ao processar. Tente novamente.';st.className='ai-st show err';
+      st.textContent='Erro ao processar. Verifique sua conexao.';
+      st.className='ai-st show err';
     }
   }
-  btn.disabled=false;btn.innerHTML='Corrigir e extrair ↗';
+  btn.disabled=false;
+  btn.innerHTML='Corrigir e extrair ↗';
 }
+
 function preencher(d){
   document.getElementById('corr-text').textContent=d.texto_corrigido||'';
   document.getElementById('corr-box').className='corr-box show';
@@ -732,9 +750,9 @@ function interpDt(s){
   const ndow=t=>{const diff=(t-td+7)%7;return add(diff);};
 
   // Expressões relativas simples
+  if(/depois\s+de\s+amanha/.test(n))return add(2);
   if(/\bhoje\b/.test(n))return fmt(now);
   if(/\bamanha\b/.test(n))return add(1);
-  if(/depois\s+de\s+amanha/.test(n))return add(2);
   if(/essa\s+semana|esta\s+semana/.test(n))return fmt(now);
   if(/fim\s+de\s+semana/.test(n))return ndow(6);
   if(/fim\s+do\s+mes/.test(n)){const l=new Date(now.getFullYear(),now.getMonth()+1,0);return fmt(l);}
