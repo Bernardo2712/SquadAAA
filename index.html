@@ -266,6 +266,16 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
 .att-item .att-remove:hover{color:var(--danger);}
 .att-preview{width:60px;height:60px;border-radius:6px;object-fit:cover;border:1px solid var(--gray-200);}
 .paste-hint{font-size:11px;color:var(--gray-400);margin-top:6px;text-align:center;}
+
+/* ── AUDIO ── */
+.audio-wrap{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;}
+.btn-audio{display:flex;align-items:center;gap:6px;padding:9px 14px;border-radius:var(--r);font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer;border:1.5px solid var(--gray-200);background:white;color:var(--gray-700);transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.btn-audio.recording{background:var(--danger-lt);border-color:var(--danger);color:var(--danger);animation:recPulse 1s infinite;}
+@keyframes recPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.btn-audio .rec-dot{width:8px;height:8px;border-radius:50%;background:var(--danger);flex-shrink:0;}
+.audio-timer{font-size:12px;color:var(--gray-400);font-family:var(--mono);}
+.audio-preview{display:flex;align-items:center;gap:8px;background:var(--apex-lt);border:1px solid rgba(0,85,165,.15);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--apex-dk);}
+.audio-preview audio{height:32px;max-width:180px;}
 </style>
 </head>
 <body>
@@ -327,7 +337,17 @@ textarea.dem-in::placeholder{color:var(--gray-400);}
             <div class="ua-icon">📎</div>
             <div class="ua-text">Arraste arquivos ou <span>clique para anexar</span><br>Imagens, PDF, Word, Excel — a IA lê e extrai as informações</div>
           </div>
-          <div class="paste-hint">💡 Você também pode <strong>colar imagens</strong> diretamente (Ctrl+V)</div>
+          <div class="paste-hint">💡 Cole imagens com Ctrl+V ou grave um áudio abaixo</div>
+          <div class="audio-wrap">
+            <button class="btn-audio" id="audio-btn" onclick="toggleRecording()">
+              <div class="rec-dot"></div> Gravar áudio
+            </button>
+            <span class="audio-timer" id="audio-timer" style="display:none">00:00</span>
+            <div class="audio-preview" id="audio-preview" style="display:none">
+              <audio id="audio-player" controls></audio>
+              <button onclick="clearAudio()" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:16px;">✕</button>
+            </div>
+          </div>
           <div class="attachments" id="attachments"></div>
 
           <div class="controls">
@@ -521,77 +541,243 @@ async function save(){
   }catch(e){}
 }
 
-// IA
-async function corrigir(){
-  const raw=document.getElementById('ai-text').value.trim();
-  if(!raw && !attachments.length){alert('Cole uma demanda ou anexe um arquivo.');return;}
-  const btn=document.getElementById('main-btn');
-  const st=document.getElementById('ai-st');
-  btn.disabled=true;btn.innerHTML='<span class="spin">⟳</span> Analisando...';
-  st.textContent='IA analisando texto e anexos...';st.className='ai-st show ok';
-  document.getElementById('corr-box').className='corr-box';
+// ── AUDIO RECORDING ─────────────────────────────────────
+let mediaRecorder=null, audioChunks=[], audioBlob=null, recInterval=null, recSeconds=0;
 
-  const now=new Date();
-  const dias=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
-
-  // Build message content — text + images for vision
-  const msgContent = [];
-
-  // Add images from attachments
-  const imgAtts = attachments.filter(a=>a.type.startsWith('image/'));
-  for(const img of imgAtts){
-    const b64 = img.dataUrl.split(',')[1];
-    const mtype = img.type||'image/jpeg';
-    msgContent.push({type:'image',source:{type:'base64',media_type:mtype,data:b64}});
+async function toggleRecording(){
+  const btn=document.getElementById('audio-btn');
+  if(mediaRecorder && mediaRecorder.state==='recording'){
+    mediaRecorder.stop();
+    return;
   }
-
-  const textoPart = raw || '(sem texto — analise apenas os anexos acima)';
-  
-  msgContent.push({type:'text',text:`Você é um assistente de gestão de tarefas bancárias. Analise o conteúdo (texto e/ou imagens) e retorne APENAS JSON válido, sem texto extra.
-
-Hoje: ${todayS()} (${dias[now.getDay()]})
-
-Texto recebido: "${textoPart}"
-
-IMPORTANTE — limpeza do texto:
-- O texto pode vir copiado de WhatsApp/Teams com formato bagunçado como: "[13:34, 02/04/2026] Nome: mensagem[13:34, 02/04/2026] Nome: outra mensagem"
-- Nesse caso, extraia APENAS o conteúdo das mensagens, ignorando timestamps e nomes repetidos
-- Corrija ortografia, nomes próprios (inicial maiúscula em cada palavra), siglas em MAIÚSCULO, abreviações (pra→para, ate→até, vc→você, tbm→também, n→não)
-- Se houver imagens anexadas, extraia as informações relevantes delas também
-
-JSON esperado:
-{
-  "texto_corrigido": "texto limpo, organizado e corrigido — sem timestamps nem nomes repetidos",
-  "titulo": "ação principal em até 70 chars",
-  "banker": "nome do solicitante com maiúsculas, vazio se não houver",
-  "data_texto": "expressão de data: amanhã, terça, dia 15, 10/04 — vazio se não houver",
-  "hora_texto": "expressão de hora: 17h, fim do dia, durante o dia — vazio se não houver",
-  "prioridade": "low se baixa/sem pressa, high se urgente/asap, mid padrão"
-}`});
-
   try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    audioChunks=[];
+    mediaRecorder=new MediaRecorder(stream);
+    mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
+    mediaRecorder.onstop=async()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      clearInterval(recInterval);
+      document.getElementById('audio-timer').style.display='none';
+      btn.classList.remove('recording');
+      btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
+      audioBlob=new Blob(audioChunks,{type:'audio/webm'});
+      const url=URL.createObjectURL(audioBlob);
+      document.getElementById('audio-player').src=url;
+      document.getElementById('audio-preview').style.display='flex';
+      // Auto-transcribe
+      await transcribeAudio();
+    };
+    mediaRecorder.start();
+    recSeconds=0;
+    document.getElementById('audio-timer').style.display='inline';
+    document.getElementById('audio-timer').textContent='00:00';
+    recInterval=setInterval(()=>{
+      recSeconds++;
+      const m=String(Math.floor(recSeconds/60)).padStart(2,'0');
+      const s=String(recSeconds%60).padStart(2,'0');
+      document.getElementById('audio-timer').textContent=m+':'+s;
+    },1000);
+    btn.classList.add('recording');
+    btn.innerHTML='<div class="rec-dot"></div> Parar gravação';
+  }catch(e){
+    alert('Permita o acesso ao microfone para gravar áudio.');
+  }
+}
+
+async function transcribeAudio(){
+  if(!audioBlob) return;
+  const st=document.getElementById('ai-st');
+  st.textContent='Transcrevendo áudio...';st.className='ai-st show ok';
+  try{
+    // Convert to base64
+    const reader=new FileReader();
+    const b64=await new Promise((res,rej)=>{
+      reader.onload=e=>res(e.target.result.split(',')[1]);
+      reader.onerror=rej;
+      reader.readAsDataURL(audioBlob);
+    });
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:1000,
-        messages:[{role:'user',content:msgContent}]
+        max_tokens:600,
+        messages:[{role:'user',content:[
+          {type:'text',text:`Você é um assistente de transcrição e gestão de tarefas bancárias.
+
+O usuário gravou um áudio descrevendo uma demanda de trabalho. Infelizmente não consigo processar áudio diretamente, mas o usuário pode digitar o que falou no campo de texto.
+
+Retorne este JSON informando que o áudio foi recebido mas precisa ser transcrito manualmente:
+{
+  "texto_corrigido": "Áudio recebido. Por favor, digite o conteúdo do áudio no campo de texto acima e clique em Corrigir e extrair.",
+  "titulo": "",
+  "banker": "",
+  "data_texto": "",
+  "hora_texto": "",
+  "prioridade": "mid"
+}`}
+        ]}]
       })
+    });
+    // Since Claude can't process audio directly via browser, use Web Speech API
+    st.textContent='Áudio gravado! Clique em "Corrigir e extrair" após digitar o conteúdo.';
+    st.className='ai-st show ok';
+  }catch(e){
+    st.textContent='Áudio gravado. Digite o conteúdo no campo acima.';
+    st.className='ai-st show ok';
+  }
+}
+
+// Use Web Speech API for real-time transcription
+function startSpeechRecognition(){
+  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){
+    return false;
+  }
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const recognition=new SR();
+  recognition.lang='pt-BR';
+  recognition.continuous=true;
+  recognition.interimResults=true;
+  const textarea=document.getElementById('ai-text');
+  let finalText='';
+  recognition.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal) finalText+=e.results[i][0].transcript+' ';
+      else interim+=e.results[i][0].transcript;
+    }
+    textarea.value=finalText+interim;
+  };
+  recognition.onerror=()=>{};
+  recognition.onend=()=>{
+    textarea.value=finalText.trim();
+    if(finalText.trim()) corrigir();
+  };
+  return recognition;
+}
+
+// Override toggleRecording to use Speech API when available
+(function(){
+  const original=toggleRecording;
+  window.toggleRecording=async function(){
+    const btn=document.getElementById('audio-btn');
+    // Try Web Speech API first (real-time transcription)
+    if(!mediaRecorder || mediaRecorder.state!=='recording'){
+      const sr=startSpeechRecognition();
+      if(sr){
+        window._currentSR=sr;
+        sr.start();
+        btn.classList.add('recording');
+        btn.innerHTML='<div class="rec-dot"></div> Parar e transcrever';
+        recSeconds=0;
+        document.getElementById('audio-timer').style.display='inline';
+        document.getElementById('audio-timer').textContent='00:00';
+        recInterval=setInterval(()=>{
+          recSeconds++;
+          const m=String(Math.floor(recSeconds/60)).padStart(2,'0');
+          const s=String(recSeconds%60).padStart(2,'0');
+          document.getElementById('audio-timer').textContent=m+':'+s;
+        },1000);
+        return;
+      }
+    }
+    // Stop speech recognition if active
+    if(window._currentSR){
+      clearInterval(recInterval);
+      document.getElementById('audio-timer').style.display='none';
+      btn.classList.remove('recording');
+      btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
+      window._currentSR.stop();
+      window._currentSR=null;
+      return;
+    }
+    original();
+  };
+})();
+
+function clearAudio(){
+  audioBlob=null;audioChunks=[];
+  document.getElementById('audio-preview').style.display='none';
+  document.getElementById('audio-player').src='';
+}
+
+// IA
+async function corrigir(){
+  const raw=document.getElementById('ai-text').value.trim();
+  if(!raw && !attachments.length){alert('Cole uma demanda, anexe um arquivo ou grave um áudio.');return;}
+  const btn=document.getElementById('main-btn');
+  const st=document.getElementById('ai-st');
+  btn.disabled=true;btn.innerHTML='<span class="spin">⟳</span> Analisando...';
+  st.textContent='IA analisando...';st.className='ai-st show ok';
+  document.getElementById('corr-box').className='corr-box';
+
+  const now=new Date();
+  const dias=['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+  const imgAtts=attachments.filter(a=>a.type.startsWith('image/'));
+  const hasImages=imgAtts.length>0;
+
+  // Build message
+  const msgContent=[];
+
+  // Add images
+  for(const img of imgAtts){
+    const b64=img.dataUrl.split(',')[1];
+    msgContent.push({type:'image',source:{type:'base64',media_type:img.type||'image/jpeg',data:b64}});
+  }
+
+  const instrucoes=`Você é um assistente de gestão de tarefas bancárias. Analise o conteúdo abaixo e retorne APENAS JSON válido, sem texto extra, sem markdown.
+
+Hoje: ${todayS()} (${dias[now.getDay()]})
+
+${hasImages?`IMAGENS ANEXADAS: Leia TODAS as imagens com atenção. Extraia nomes de pessoas, tarefas, prazos, valores, qualquer informação relevante para a demanda. Mesmo que seja uma conversa de WhatsApp, extraia o contexto completo.`:''}
+
+${raw?`TEXTO RECEBIDO:
+"${raw}"
+
+REGRAS DE LIMPEZA DO TEXTO:
+- Se o texto vier no formato de WhatsApp/Teams como "[HH:MM, DD/MM/YYYY] Nome: mensagem", remova TODOS os timestamps e nomes repetidos, mantendo APENAS o conteúdo das mensagens
+- Junte as mensagens em um texto coerente e limpo
+- Corrija ortografia (qe→que, kconta→conta, odia→o dia, pra→para, ate→até, vc→você, tbm→também, n→não, mt→muito)
+- Nomes próprios com inicial maiúscula em cada palavra
+- Siglas em MAIÚSCULO (stvm→STVM, cpf→CPF, btg→BTG)
+- Início de frases com maiúscula, pontuação adequada`:'Extraia as informações das imagens anexadas.'}
+
+Retorne este JSON:
+{
+  "texto_corrigido": "resumo limpo da demanda em 2-4 frases, sem timestamps, sem nomes repetidos, sem formatação de WhatsApp. Apenas o que precisa ser feito.",
+  "titulo": "ação principal objetiva em até 70 chars",
+  "banker": "nome da pessoa que pediu a demanda, com maiúsculas em cada palavra. Vazio se não identificado.",
+  "data_texto": "expressão de data encontrada: segunda, terça, dia 15, 10/04, amanhã — vazio se não houver",
+  "hora_texto": "expressão de hora: 17h, fim do dia, durante o dia — vazio se não houver",
+  "prioridade": "low se baixa/sem pressa, high se urgente/asap, mid padrão"
+}`;
+
+  msgContent.push({type:'text',text:instrucoes});
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:msgContent}]})
     });
     if(!res.ok)throw new Error('HTTP '+res.status);
     const data=await res.json();
     const txt=(data.content||[]).map(i=>i.text||'').join('').trim().replace(/^```json\s*/,'').replace(/^```/,'').replace(/```$/,'').trim();
     preencher(JSON.parse(txt));
-    st.textContent='✅ Texto corrigido e campos preenchidos!';st.className='ai-st show ok';
+    st.textContent='✅ Demanda extraída e campos preenchidos!';st.className='ai-st show ok';
   }catch(e){
-    const c=corLocal(raw);const f=extrai(c);f.texto_corrigido=c;
-    preencher(f);
-    st.textContent='✅ Correção local aplicada.';st.className='ai-st show ok';
+    // fallback local apenas para texto
+    if(raw){
+      const c=corLocal(raw);const f=extrai(c);f.texto_corrigido=c;
+      preencher(f);
+      st.textContent='✅ Correção local aplicada.';st.className='ai-st show ok';
+    } else {
+      st.textContent='Erro ao processar. Tente novamente.';st.className='ai-st show err';
+    }
   }
   btn.disabled=false;btn.innerHTML='Corrigir e extrair ↗';
 }
-
 function preencher(d){
   document.getElementById('corr-text').textContent=d.texto_corrigido||'';
   document.getElementById('corr-box').className='corr-box show';
