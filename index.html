@@ -541,165 +541,66 @@ async function save(){
   }catch(e){}
 }
 
-// ── AUDIO RECORDING ─────────────────────────────────────
-let mediaRecorder=null, audioChunks=[], audioBlob=null, recInterval=null, recSeconds=0;
+// ── AUDIO RECORDING (Web Speech API) ────────────────────
+let _sr=null, _recTimer=null, _recSecs=0, _isRecording=false;
 
-async function toggleRecording(){
-  const btn=document.getElementById('audio-btn');
-  if(mediaRecorder && mediaRecorder.state==='recording'){
-    mediaRecorder.stop();
-    return;
-  }
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    audioChunks=[];
-    mediaRecorder=new MediaRecorder(stream);
-    mediaRecorder.ondataavailable=e=>audioChunks.push(e.data);
-    mediaRecorder.onstop=async()=>{
-      stream.getTracks().forEach(t=>t.stop());
-      clearInterval(recInterval);
-      document.getElementById('audio-timer').style.display='none';
-      btn.classList.remove('recording');
-      btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
-      audioBlob=new Blob(audioChunks,{type:'audio/webm'});
-      const url=URL.createObjectURL(audioBlob);
-      document.getElementById('audio-player').src=url;
-      document.getElementById('audio-preview').style.display='flex';
-      // Auto-transcribe
-      await transcribeAudio();
-    };
-    mediaRecorder.start();
-    recSeconds=0;
-    document.getElementById('audio-timer').style.display='inline';
-    document.getElementById('audio-timer').textContent='00:00';
-    recInterval=setInterval(()=>{
-      recSeconds++;
-      const m=String(Math.floor(recSeconds/60)).padStart(2,'0');
-      const s=String(recSeconds%60).padStart(2,'0');
-      document.getElementById('audio-timer').textContent=m+':'+s;
-    },1000);
-    btn.classList.add('recording');
-    btn.innerHTML='<div class="rec-dot"></div> Parar gravação';
-  }catch(e){
-    alert('Permita o acesso ao microfone para gravar áudio.');
-  }
+function toggleRecording(){
+  if(_isRecording){ stopRecording(); return; }
+  startRecording();
 }
 
-async function transcribeAudio(){
-  if(!audioBlob) return;
-  const st=document.getElementById('ai-st');
-  st.textContent='Transcrevendo áudio...';st.className='ai-st show ok';
-  try{
-    // Convert to base64
-    const reader=new FileReader();
-    const b64=await new Promise((res,rej)=>{
-      reader.onload=e=>res(e.target.result.split(',')[1]);
-      reader.onerror=rej;
-      reader.readAsDataURL(audioBlob);
-    });
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:600,
-        messages:[{role:'user',content:[
-          {type:'text',text:`Você é um assistente de transcrição e gestão de tarefas bancárias.
-
-O usuário gravou um áudio descrevendo uma demanda de trabalho. Infelizmente não consigo processar áudio diretamente, mas o usuário pode digitar o que falou no campo de texto.
-
-Retorne este JSON informando que o áudio foi recebido mas precisa ser transcrito manualmente:
-{
-  "texto_corrigido": "Áudio recebido. Por favor, digite o conteúdo do áudio no campo de texto acima e clique em Corrigir e extrair.",
-  "titulo": "",
-  "banker": "",
-  "data_texto": "",
-  "hora_texto": "",
-  "prioridade": "mid"
-}`}
-        ]}]
-      })
-    });
-    // Since Claude can't process audio directly via browser, use Web Speech API
-    st.textContent='Áudio gravado! Clique em "Corrigir e extrair" após digitar o conteúdo.';
-    st.className='ai-st show ok';
-  }catch(e){
-    st.textContent='Áudio gravado. Digite o conteúdo no campo acima.';
-    st.className='ai-st show ok';
-  }
-}
-
-// Use Web Speech API for real-time transcription
-function startSpeechRecognition(){
-  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){
-    return false;
-  }
+function startRecording(){
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const recognition=new SR();
-  recognition.lang='pt-BR';
-  recognition.continuous=true;
-  recognition.interimResults=true;
-  const textarea=document.getElementById('ai-text');
-  let finalText='';
-  recognition.onresult=e=>{
+  if(!SR){ alert('Seu navegador não suporta gravação de voz. Use Chrome ou Edge.'); return; }
+  _sr=new SR();
+  _sr.lang='pt-BR';
+  _sr.continuous=true;
+  _sr.interimResults=true;
+  let final='';
+  _sr.onresult=e=>{
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
-      if(e.results[i].isFinal) finalText+=e.results[i][0].transcript+' ';
+      if(e.results[i].isFinal) final+=e.results[i][0].transcript+' ';
       else interim+=e.results[i][0].transcript;
     }
-    textarea.value=finalText+interim;
+    document.getElementById('ai-text').value=final+interim;
   };
-  recognition.onerror=()=>{};
-  recognition.onend=()=>{
-    textarea.value=finalText.trim();
-    if(finalText.trim()) corrigir();
-  };
-  return recognition;
+  _sr.onerror=err=>{ if(err.error!=='no-speech') stopRecording(); };
+  _sr.onend=()=>{ if(_isRecording) stopRecording(true); };
+  _sr.start();
+  _isRecording=true;
+  _recSecs=0;
+  // Timer — usa Date para evitar drift
+  const startTime=Date.now();
+  clearInterval(_recTimer);
+  _recTimer=setInterval(()=>{
+    _recSecs=Math.floor((Date.now()-startTime)/1000);
+    const m=String(Math.floor(_recSecs/60)).padStart(2,'0');
+    const s=String(_recSecs%60).padStart(2,'0');
+    const el=document.getElementById('audio-timer');
+    if(el){ el.textContent=m+':'+s; el.style.display='inline'; }
+  },500);
+  const btn=document.getElementById('audio-btn');
+  btn.classList.add('recording');
+  btn.innerHTML='<div class="rec-dot"></div> Parar e transcrever';
 }
 
-// Override toggleRecording to use Speech API when available
-(function(){
-  const original=toggleRecording;
-  window.toggleRecording=async function(){
-    const btn=document.getElementById('audio-btn');
-    // Try Web Speech API first (real-time transcription)
-    if(!mediaRecorder || mediaRecorder.state!=='recording'){
-      const sr=startSpeechRecognition();
-      if(sr){
-        window._currentSR=sr;
-        sr.start();
-        btn.classList.add('recording');
-        btn.innerHTML='<div class="rec-dot"></div> Parar e transcrever';
-        recSeconds=0;
-        document.getElementById('audio-timer').style.display='inline';
-        document.getElementById('audio-timer').textContent='00:00';
-        recInterval=setInterval(()=>{
-          recSeconds++;
-          const m=String(Math.floor(recSeconds/60)).padStart(2,'0');
-          const s=String(recSeconds%60).padStart(2,'0');
-          document.getElementById('audio-timer').textContent=m+':'+s;
-        },1000);
-        return;
-      }
-    }
-    // Stop speech recognition if active
-    if(window._currentSR){
-      clearInterval(recInterval);
-      document.getElementById('audio-timer').style.display='none';
-      btn.classList.remove('recording');
-      btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
-      window._currentSR.stop();
-      window._currentSR=null;
-      return;
-    }
-    original();
-  };
-})();
+function stopRecording(autoProcess=false){
+  _isRecording=false;
+  clearInterval(_recTimer);
+  _recTimer=null;
+  if(_sr){ try{ _sr.stop(); }catch(e){} _sr=null; }
+  const btn=document.getElementById('audio-btn');
+  btn.classList.remove('recording');
+  btn.innerHTML='<div class="rec-dot"></div> Gravar áudio';
+  const timer=document.getElementById('audio-timer');
+  if(timer) timer.style.display='none';
+  const txt=document.getElementById('ai-text').value.trim();
+  if(txt) corrigir();
+}
 
 function clearAudio(){
-  audioBlob=null;audioChunks=[];
   document.getElementById('audio-preview').style.display='none';
-  document.getElementById('audio-player').src='';
 }
 
 // IA
@@ -823,34 +724,59 @@ function extrai(text){
 // DATE/TIME
 function interpDt(s){
   if(!s)return null;
+  // normalize: lowercase, remove accents, replace hyphens
   const n=s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[-–]/g,' ');
   const now=new Date(),td=now.getDay();
   const fmt=dt=>{const d=new Date(dt);return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;};
   const add=days=>{const d=new Date(now);d.setDate(d.getDate()+days);return fmt(d);};
   const ndow=t=>{const diff=(t-td+7)%7;return add(diff);};
+
+  // Expressões relativas simples
   if(/\bhoje\b/.test(n))return fmt(now);
   if(/\bamanha\b/.test(n))return add(1);
-  if(/depois de amanha/.test(n))return add(2);
-  if(/fim de semana/.test(n))return ndow(6);
-  if(/fim do mes/.test(n)){const l=new Date(now.getFullYear(),now.getMonth()+1,0);return fmt(l);}
-  if(/semana que vem|proxima semana/.test(n))return add(7-td+1);
-  if(/em (\d+) dias?/.test(n)){const m=n.match(/em (\d+) dias?/);return add(parseInt(m[1]));}
+  if(/depois\s+de\s+amanha/.test(n))return add(2);
+  if(/essa\s+semana|esta\s+semana/.test(n))return fmt(now);
+  if(/fim\s+de\s+semana/.test(n))return ndow(6);
+  if(/fim\s+do\s+mes/.test(n)){const l=new Date(now.getFullYear(),now.getMonth()+1,0);return fmt(l);}
+  if(/semana\s+que\s+vem|proxima\s+semana/.test(n))return add(7-td+1);
+  if(/em\s+(\d+)\s+dias?/.test(n)){const m=n.match(/em\s+(\d+)\s+dias?/);return add(parseInt(m[1]));}
+  if(/daqui\s+(\d+)\s+dias?/.test(n)){const m=n.match(/daqui\s+(\d+)\s+dias?/);return add(parseInt(m[1]));}
+
+  // Próximo dia da semana (com variações: "segunda de manhã", "terça à tarde", etc.)
   const dm={'domingo':0,'dom':0,'segunda':1,'seg':1,'terca':2,'ter':2,'quarta':3,'qua':3,'quinta':4,'qui':4,'sexta':5,'sex':5,'sabado':6,'sab':6};
-  for(const[k,v]of Object.entries(dm)){if(new RegExp(`\\b${k}\\b`).test(n))return ndow(v);}
+  for(const[k,v]of Object.entries(dm)){
+    if(new RegExp(`\\b${k}\\b`).test(n))return ndow(v);
+  }
+
+  // "dia 15" ou "dia 15/04"
   const dM=n.match(/dia\s+(\d{1,2})(?:[\/\-](\d{1,2}))?/);
-  if(dM){const d=parseInt(dM[1]),m=dM[2]?parseInt(dM[2])-1:now.getMonth();let y=now.getFullYear();if(m<now.getMonth()||(m===now.getMonth()&&d<now.getDate()))y++;return fmt(new Date(y,m,d));}
+  if(dM){
+    const d=parseInt(dM[1]),m=dM[2]?parseInt(dM[2])-1:now.getMonth();
+    let y=now.getFullYear();
+    if(m<now.getMonth()||(m===now.getMonth()&&d<now.getDate()))y++;
+    return fmt(new Date(y,m,d));
+  }
+
+  // dd/mm ou dd/mm/yyyy
   const sM=n.match(/(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?/);
-  if(sM){const d=parseInt(sM[1]),m=parseInt(sM[2])-1;let y=sM[3]?parseInt(sM[3]):now.getFullYear();if(y<100)y+=2000;if(!sM[3]&&(m<now.getMonth()||(m===now.getMonth()&&d<now.getDate())))y++;return fmt(new Date(y,m,d));}
+  if(sM){
+    const d=parseInt(sM[1]),m=parseInt(sM[2])-1;
+    let y=sM[3]?parseInt(sM[3]):now.getFullYear();
+    if(y<100)y+=2000;
+    if(!sM[3]&&(m<now.getMonth()||(m===now.getMonth()&&d<now.getDate())))y++;
+    return fmt(new Date(y,m,d));
+  }
   return null;
 }
 function interpTm(s){
   if(!s)return null;
   const n=s.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   if(/meio[\s-]?dia/.test(n))return'12:00';
-  if(/fim do dia|eod/.test(n))return'18:00';
-  if(/durante o dia|ao longo/.test(n))return'17:00';
-  if(/manha/.test(n))return'09:00';
-  if(/\btarde\b/.test(n))return'14:00';
+  if(/fim do dia|eod|final do dia/.test(n))return'18:00';
+  if(/durante o dia|ao longo|qualquer hora|ao longo do dia/.test(n))return'17:00';
+  if(/\bmanha\b|de manha|pela manha|inicio do dia/.test(n))return'09:00';
+  if(/\btarde\b|a tarde|pela tarde|de tarde/.test(n))return'14:00';
+  if(/\bnoite\b|a noite|pela noite/.test(n))return'19:00';
   const hm=n.match(/(\d{1,2})h(\d{2})?/);if(hm)return`${pad(parseInt(hm[1]))}:${hm[2]||'00'}`;
   const col=n.match(/(\d{1,2}):(\d{2})/);if(col)return`${pad(parseInt(col[1]))}:${col[2]}`;
   return null;
